@@ -1,0 +1,105 @@
+% Christian Chapman
+% AE 502
+% Problem 1: code is to show that the two body propagator works
+clear
+clc
+close all
+% define initial state vectors for the epoch of 2017-Jan-01 00:00:00.0000 UTC
+% assume two-body motion wrt the sun
+% 'Oumouamoua
+rO = [3.515868886595499*10^(-2), -3.162046390773074, 4.493983111703389];
+vO = [-2.317577766980901*10^(-3), 9.843360903693031*10^(-3), -1.541856855538041*10^(-2)];
+% Earth
+rE = [-1.796136509111975*10^(-1), 9.667949206859814*10^(-1), -3.668681017942158*10^(-5)];
+vE =  [-1.720038360888334*10^(-2), -3.211186197806460^10^(-3), 7.927736735960840*10^(-7)];
+
+% earth time/launch date
+t = [1:1:334];
+% mu of sun from km^3/s^2 to AU^3/day^2
+mu = 132712440018*((60*60*24)^2)/(149597870.7^3);
+% range of arrival days
+time = [212:1:545];
+
+for i = 1:length(t)
+    dt = t(i);
+    [rearth,vearth] = twobody(dt,rE,vE,mu);
+    rvec(i,1) = rearth(1);
+    rvec(i,2) = rearth(2);
+    rvec(i,3) = rearth(3);
+end
+
+for i = 1:length(time)
+    dt = time(i);
+    [rOu,vOu] = twobody(dt,rO,vO,mu);
+    rvec(i,4) = rOu(1);
+    rvec(i,5) = rOu(2);
+    rvec(i,6) = rOu(3);
+end
+
+figure(1)
+plot3(rvec(:,1),rvec(:,2),rvec(:,3))
+hold on
+plot3(rvec(:,4),rvec(:,5),rvec(:,6))
+hold off
+
+function [rvec,vvec] = twobody(dt,r0vec,v0vec,mu)
+% 1. Write your own Universal Variable two-body orbit propagator (using
+% Curtis Algorithms 3.3 and 3.4)
+% Using initial conditions...
+% magnitude of r0 and v0
+r0 = norm(r0vec);
+v0 = norm(v0vec);
+% radial component of velocity vr)o by projecting v0 onto the direction of
+% r0
+vrad = dot(v0vec, r0vec)/r0;
+% the reciprocal a of the semimajor axis, using eq (3.48)
+a = 2/r0 - (v0^2)/mu;
+% With r0, vrad, a, and dt, use Algorithm 3.3 to find the universal anomaly
+% chi
+% use eq 3.66 for an initial estimate of chi0
+chi0 = sqrt(mu)*abs(a)*dt;
+% determine universal anomaly chi
+chi = chi0;
+% set higher tolerance to enter while loop
+tol = 1;
+% determine how many iterations this takes
+it = 0;
+while abs(tol) > 1e-10
+    % z is the primary input to the stumpff functions
+    z = a*chi^2;
+    % depending on trajectory, determine C and S
+    if z > 0
+        C = (1 - cos(sqrt(z)))/z;
+        S = (sqrt(z) - sin(sqrt(z)))/z^(3/2);
+    elseif z < 0
+        C = (cosh(sqrt(-z)) - 1)/(-z);
+        S = (sinh(sqrt(-z)) - sqrt(-z))/(-z)^(3/2);
+    else
+        C = 1/2;
+        S = 1/6;
+    end
+    func = ((r0*vrad)/sqrt(mu))*(chi^2)*C + (1 - a*r0)*(chi^3)*S + r0*chi - sqrt(mu)*dt;
+    fprime = ((r0*vrad)/sqrt(mu))*chi*(1 - a*(chi^2)*S) + (1 - a*r0)*(chi^2)*C + r0;
+    tol = func/fprime;
+    chi = chi - tol;
+    it = it + 1;
+end
+% solution is actually chi,i not chi,i+1
+chi = chi + tol;
+% obtain f and g
+f = 1 - (chi^2)*C/r0;
+g = dt - (1/sqrt(mu))*(chi^3)*S;
+% determine new r vector
+rvec = f*r0vec + g*v0vec;
+% determine new r magnitude
+r = norm(rvec);
+% obtain fdot and gdot
+fdot = (sqrt(mu)/(r*r0))*(a*(chi^3)*S - chi);
+gdot = 1 - ((chi^2)/r)*C;
+% determine new v vector
+vvec = fdot*r0vec + gdot*v0vec;
+v = norm(vvec);
+% output rvec and vvec
+% for this homework, using rvec for earth, Oumouamoua, and Borisov to input
+% into lambert solver
+end
