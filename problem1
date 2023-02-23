@@ -43,8 +43,6 @@ plot3(rvec(:,4),rvec(:,5),rvec(:,6))
 hold off
 
 function [rvec,vvec] = twobody(dt,r0vec,v0vec,mu)
-% 1. Write your own Universal Variable two-body orbit propagator (using
-% Curtis Algorithms 3.3 and 3.4)
 % Using initial conditions...
 % magnitude of r0 and v0
 r0 = norm(r0vec);
@@ -62,8 +60,7 @@ chi0 = sqrt(mu)*abs(a)*dt;
 chi = chi0;
 % set higher tolerance to enter while loop
 tol = 1;
-% determine how many iterations this takes
-it = 0;
+
 while abs(tol) > 1e-10
     % z is the primary input to the stumpff functions
     z = a*chi^2;
@@ -82,7 +79,6 @@ while abs(tol) > 1e-10
     fprime = ((r0*vrad)/sqrt(mu))*chi*(1 - a*(chi^2)*S) + (1 - a*r0)*(chi^2)*C + r0;
     tol = func/fprime;
     chi = chi - tol;
-    it = it + 1;
 end
 % solution is actually chi,i not chi,i+1
 chi = chi + tol;
@@ -98,8 +94,6 @@ fdot = (sqrt(mu)/(r*r0))*(a*(chi^3)*S - chi);
 gdot = 1 - ((chi^2)/r)*C;
 % determine new v vector
 vvec = fdot*r0vec + gdot*v0vec;
-v = norm(vvec);
+
 % output rvec and vvec
-% for this homework, using rvec for earth, Oumouamoua, and Borisov to input
-% into lambert solver
 end
