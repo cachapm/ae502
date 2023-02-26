@@ -1,1 +1,315 @@
+% Christian Chapman
+% AE 502
+% Problem 4 flyby
+clear
+clc
+close all
+% define initial state vectors for the epoch of 2017-Jan-01 00:00:00.0000 UTC
+% assume two-body motion wrt the sun
+% Borisov
+rB = [7.249472033259724, 14.61063037906177, 14.24274452216359];
+vB = [-8.241709369476881*10^(-3), -1.156219024581502*10^(-2), -1.317135977481448*10^(-2)];
+% Earth
+rE = [-1.796136509111975*10^(-1), 9.667949206859814*10^(-1), -3.668681017942158*10^(-5)];
+vE =  [-1.720038360888334*10^(-2), -3.211186197806460^10^(-3), 7.927736735960840*10^(-7)];
+% time span of departure date
+t = [1:1:1277];
+% mu of sun from km^3/s^2 to AU^3/day^2
+mu = 132712440018*((60*60*24)^2)/(149597870.7^3);
+% max range of arrival date
+time = [881:1:1826];
+
+% creating for loops to create table of dv values
+% (1,1) is if you launched Jan 1 2017 and the TOF was 212 days
+for j = 1:length(time)
+    tof = time(j);
+    for i = 1:length(t)
+    dt = t(i);
+    [rearth,vearth] = twobody(dt,rE,vE,mu);
+    rvec(i,1) = rearth(1);
+    rvec(i,2) = rearth(2);
+    rvec(i,3) = rearth(3);
+    [rBo,vBo] = twobody(tof,rB,vB,mu);
+    [z,v1vec] = lambertflyby(rearth,rBo,mu,tof);
+    dv = abs(norm(vearth) - norm(v1vec));
+    dv = dv*149597870.7/(60*60*24);
+    dvtable(j,i) = dv;
+    if dvtable(j,i) > 20 % for fly-by
+        dvtable(j,i) = 0;
+    end
+    if isnan(dvtable(j,i))
+        dvtable(j,i) = 0;
+    end
+    end
+end
+
+% creating plot to get idea of dv spread
+x = linspace(1,max(t));
+y = linspace(881,max(time));
+imagesc(x,y,dvtable)
+colormap('parula')
+colorbar
+
+function [rvec,vvec] = twobody(dt,r0vec,v0vec,mu)
+% 1. Write your own Universal Variable two-body orbit propagator (using
+% Curtis Algorithms 3.3 and 3.4)
+% Using initial conditions...
+% magnitude of r0 and v0
+r0 = norm(r0vec);
+v0 = norm(v0vec);
+% radial component of velocity vr)o by projecting v0 onto the direction of
+% r0
+vrad = dot(v0vec, r0vec)/r0;
+% the reciprocal a of the semimajor axis, using eq (3.48)
+a = 2/r0 - (v0^2)/mu;
+% With r0, vrad, a, and dt, use Algorithm 3.3 to find the universal anomaly
+% chi
+% use eq 3.66 for an initial estimate of chi0
+chi0 = sqrt(mu)*abs(a)*dt;
+% determine universal anomaly chi
+chi = chi0;
+% set higher tolerance to enter while loop
+tol = 1;
+% determine how many iterations this takes
+it = 0;
+while abs(tol) > 1e-10
+    % z is the primary input to the stumpff functions
+    z = a*chi^2;
+    % depending on trajectory, determine C and S
+    if z > 0
+        C = (1 - cos(sqrt(z)))/z;
+        S = (sqrt(z) - sin(sqrt(z)))/z^(3/2);
+    elseif z < 0
+        C = (cosh(sqrt(-z)) - 1)/(-z);
+        S = (sinh(sqrt(-z)) - sqrt(-z))/(-z)^(3/2);
+    else
+        C = 1/2;
+        S = 1/6;
+    end
+    func = ((r0*vrad)/sqrt(mu))*(chi^2)*C + (1 - a*r0)*(chi^3)*S + r0*chi - sqrt(mu)*dt;
+    fprime = ((r0*vrad)/sqrt(mu))*chi*(1 - a*(chi^2)*S) + (1 - a*r0)*(chi^2)*C + r0;
+    tol = func/fprime;
+    chi = chi - tol;
+    it = it + 1;
+end
+% solution is actually chi,i not chi,i+1
+chi = chi + tol;
+% obtain f and g
+f = 1 - (chi^2)*C/r0;
+g = dt - (1/sqrt(mu))*(chi^3)*S;
+% determine new r vector
+rvec = f*r0vec + g*v0vec;
+% determine new r magnitude
+r = norm(rvec);
+% obtain fdot and gdot
+fdot = (sqrt(mu)/(r*r0))*(a*(chi^3)*S - chi);
+gdot = 1 - ((chi^2)/r)*C;
+% determine new v vector
+vvec = fdot*r0vec + gdot*v0vec;
+v = norm(vvec);
+% output rvec and vvec
+% for this homework, using rvec for earth, Oumouamoua, and Borisov to input
+% into lambert solver
+end
+
+function [z,v1vec] = lambertflyby(r1vec,r2vec,mu,dt)
+% calculate magnitudes
+r1 = norm(r1vec);
+r2 = norm(r2vec);
+% calculate dtheta for a prograde and a retrograde orbit depending on the K
+% component of the cross between r1 and r2
+% cross check
+check = cross(r1vec,r2vec);
+if check(1,3) < 0
+    dthetap = 360 - acosd(dot(r1vec,r2vec)/(r1*r2)); % prograde
+    dthetar = acosd(dot(r1vec,r2vec)/(r1*r2)); % retrograde
+else
+    dthetap = acosd(dot(r1vec,r2vec)/(r1*r2)); % prograde
+    dthetar = 360 - acosd(dot(r1vec,r2vec)/(r1*r2)); % retrograde
+end
+% calculate A
+Ap = sind(dthetap)*sqrt((r1*r2)/(1 - cosd(dthetap))); % prograde
+Ar = sind(dthetar)*sqrt((r1*r2)/(1 - cosd(dthetar))); % retrograde
+% by iteration, solve for z
+% z is the primary input to the stumpff functions
+% from Curtis Chap 5, "Since we do not know what the orbit is, setting z =
+% 0 seems as reasonable, simple choice."
+% I suspect that this isn't the case. I have seen several examples of the
+% tolerance not converging, whenever this happens i force the while loop to
+% close
+
+before = 1;
+after = -1;
+zp = -3000;
+
+while before * after < 0
+    if zp > 0
+       Cp = (1 - cos(sqrt(zp)))/zp;
+       Sp = (sqrt(zp) - sin(sqrt(zp)))/zp^(3/2);
+    elseif zp < 0
+       Cp = (cosh(sqrt(-zp)) - 1)/(-zp);
+       Sp = (sinh(sqrt(-zp)) - sqrt(-zp))/(-zp)^(3/2);
+    else
+       Cp = 1/2;
+       Sp = 1/6;
+    end
+    yp = r1 + r2 + Ap*((zp*Sp - 1)/sqrt(Cp));
+    before = (yp/Cp)^(3/2) * Sp + Ap*sqrt(yp) - sqrt(mu)*dt;
+
+    zp = zp + 1;
+
+    if zp > 0
+       Cp = (1 - cos(sqrt(zp)))/zp;
+       Sp = (sqrt(zp) - sin(sqrt(zp)))/zp^(3/2);
+    elseif zp < 0
+        Cp = (cosh(sqrt(-zp)) - 1)/(-zp);
+        Sp = (sinh(sqrt(-zp)) - sqrt(-zp))/(-zp)^(3/2);
+    else
+        Cp = 1/2;
+        Sp = 1/6;
+    end
+    yp = r1 + r2 + Ap*((zp*Sp - 1)/sqrt(Cp));
+    after = (yp/Cp)^(3/2) * Sp + Ap*sqrt(yp) - sqrt(mu)*dt;
+end
+
+before = 1;
+after = -1;
+zr = -3000;
+
+while before * after < 0
+	
+    if zr > 0
+       Cr = (1 - cos(sqrt(zr)))/zr;
+        Sr = (sqrt(zr) - sin(sqrt(zr)))/zr^(3/2);
+    elseif zr < 0
+        Cr = (cosh(sqrt(-zr)) - 1)/(-zr);
+        Sr = (sinh(sqrt(-zr)) - sqrt(-zr))/(-zr)^(3/2);
+    else
+        Cr = 1/2;
+        Sr = 1/6;
+    end
+
+    yr = r1 + r2 + Ar*((zr*Sr - 1)/sqrt(Cr));
+    before = (yr/Cr)^(3/2) * Sr + Ar*sqrt(yr) - sqrt(mu)*dt;
+    
+    zr = zr + 1;
+    if zr > 0
+       Cr = (1 - cos(sqrt(zr)))/zr;
+        Sr = (sqrt(zr) - sin(sqrt(zr)))/zr^(3/2);
+    elseif zr < 0
+        Cr = (cosh(sqrt(-zr)) - 1)/(-zr);
+        Sr = (sinh(sqrt(-zr)) - sqrt(-zr))/(-zr)^(3/2);
+    else
+        Cr = 1/2;
+        Sr = 1/6;
+    end
+
+    yr = r1 + r2 + Ar*((zr*Sr - 1)/sqrt(Cr));
+    after = (yr/Cr)^(3/2) * Sr + Ar*sqrt(yr) - sqrt(mu)*dt;
+end
+
+% now we have much closer initial guess than 0 for zr and zp 
+tol = 1;
+it = 0;
+while abs(tol) > 1e-8
+    % depending on trajectory, determine C and S
+    if zp > 0
+        Cp = (1 - cos(sqrt(zp)))/zp;
+        Sp = (sqrt(zp) - sin(sqrt(zp)))/zp^(3/2);
+    elseif zp < 0
+        Cp = (cosh(sqrt(-zp)) - 1)/(-zp);
+        Sp = (sinh(sqrt(-zp)) - sqrt(-zp))/(-zp)^(3/2);
+    else
+        Cp = 1/2;
+        Sp = 1/6;
+    end
+    yp = r1 + r2 + Ap*((zp*Sp - 1)/sqrt(Cp));
+    funcp = (yp/Cp)^(3/2) * Sp + Ap*sqrt(yp) - sqrt(mu)*dt;
+    if zp ~= 0
+        fprimep = (yp/Cp)^(3/2) * ((1/(2*zp))*(Cp - (3/2)*(Sp/Cp)) + (3/4)*(Sp^2 / Cp)) + (Ap/8)*(3*Sp*sqrt(yp)/Cp + Ap*sqrt(Cp/yp));
+    else
+        fprimep = (sqrt(2)/40)*yp^(3/2) + (Ap/8)*(sqrt(yp) + Ap*sqrt(1/(2*yp)));
+    end
+
+    tol = funcp/fprimep;
+    zp = zp - tol;
+    it = it + 1;
+    if it > 2000
+        break
+    end
+end
+
+tol = 1;
+it = 0;
+
+while abs(tol) > 1e-8
+    % depending on trajectory, determine C and S
+    if zr > 0
+        Cr = (1 - cos(sqrt(zr)))/zr;
+        Sr = (sqrt(zr) - sin(sqrt(zr)))/zr^(3/2);
+    elseif zr < 0
+        Cr = (cosh(sqrt(-zr)) - 1)/(-zr);
+        Sr = (sinh(sqrt(-zr)) - sqrt(-zr))/(-zr)^(3/2);
+    else
+        Cr = 1/2;
+        Sr = 1/6;
+    end
+    yr = r1 + r2 + Ar*((zr*Sr - 1)/sqrt(Cr));
+    funcr = (yr/Cr)^(3/2) * Sr + Ar*sqrt(yr) - sqrt(mu)*dt;
+    if zr ~= 0
+        fprimer = (yr/Cr)^(3/2) * ((1/(2*zr))*(Cr - (3/2)*(Sr/Cr)) + (3/4)*(Sr^2 / Cr)) + (Ar/8)*(3*Sr*sqrt(yr)/Cr + Ar*sqrt(Cr/yr));
+    else
+        fprimer = (sqrt(2)/40)*yr^(3/2) + (Ar/8)*(sqrt(yr) + Ar*sqrt(1/(2*yr)));
+    end
+    tol = funcr/fprimer;
+    zr = zr - tol;
+    it = it + 1;
+    if it > 2000
+        break
+    end
+end
+
+zr = zr + tol;
+zp = zp + tol;
+% calculate y
+yr = r1 + r2 + Ar*((zr*Sr - 1)/sqrt(Cr));
+yp = r1 + r2 + Ap*((zp*Sp - 1)/sqrt(Cp));
+% calculate the lagrange f, g, fdot, and gdot functions
+fp = 1 - yp/r1;
+gp = Ap * sqrt(yp/mu);
+gdotp = 1 - yp/r2;
+
+fr = 1 - yr/r1;
+gr = Ar * sqrt(yr/mu);
+gdotr = 1 - yr/r2;
+% calculate v1vec and v2vec for prograde and retrograde options
+v1vecr = (1/gr)*(r2vec - fr*r1vec);
+%v2vecr = (1/gr)*(gdotr*r2vec - r1vec);
+v1r = norm(v1vecr);
+%v2r = norm(v2vecr);
+%dvr = abs(v1r) + abs(v2r);
+
+v1vecp = (1/gp)*(r2vec - fp*r1vec);
+%v2vecp = (1/gp)*(gdotp*r2vec - r1vec);
+v1p = norm(v1vecp);
+%v2p = norm(v2vecp);
+%dvp = abs(v1p) + abs(v2p);
+% find the minimum dv between the prograde and retrograde options
+if v1p < v1r
+    dv = v1p;
+    v1vec = v1vecp;
+    %v2vec = v2vecp;
+    z = zp;
+elseif v1p > v1r
+    dv = v1r;
+    v1vec = v1vecr;
+    %v2vec = v2vecr;
+    z = zr;
+else
+    dv = v1r;
+    v1vec = v1vecr;
+    %v2vec = v2vecr;
+    z = zr;
+end
+end
 
