@@ -41,6 +41,10 @@ figure(1)
 plot3(rvec(:,1),rvec(:,2),rvec(:,3))
 hold on
 plot3(rvec(:,4),rvec(:,5),rvec(:,6))
+title('Orbit of Earth and Oumouamoua')
+xlabel('AU')
+ylabel('AU')
+zlabel('AU')
 hold off
 
 function [rvec,vvec] = twobody(dt,r0vec,v0vec,mu)
