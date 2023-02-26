@@ -54,7 +54,7 @@ end
 
 % creating plot to get idea of dv spread
 x = linspace(1,max(t));
-y = linspace(1,max(time));
+y = linspace(212,max(time));
 imagesc(x,y,dvtable)
 colormap('parula')
 colorbar
