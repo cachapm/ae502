@@ -1,0 +1,68 @@
+% Project 2
+% Question 1
+% What orbital elements a, e, i would you choose for your Molniya
+% orbit if the perigee altitude cannot be lower than 600km to keep drag at
+% bay, and you want your satellite to orbit the Earth three times per day?
+% What is your lowest ¯˙Ω drift rate?
+clear
+clc
+close all
+% givens
+j2 = 0.00108; % -
+R = 6370; % km
+mu = 3.986*10^5; % km^3 / s^2
+% restrictions
+% perigee at least 600 km, choosing 600
+rp = 600 + R; % km
+% orbit earth three times a day -> 8 hour period
+P = 8*60*60; % seconds
+% high e value - will evaluate all to determine option
+evec = [0.5:.001:.999];
+% calculations
+% determine mean motion based off period
+n = 2*pi/P; 
+% keep the change in argument of perigee 0 by defining two inclination
+% values
+i = acosd(sqrt(1/5));
+%i = acosd(-sqrt(1/5));
+for j = 1:length(evec)
+    % objective: evaluate molniya function at different eccentricities.
+    % tabulating different variables to see what the orbit is doing
+    e = evec(j);
+    [a,omegadot,ra,vp,va] = molniya(j2,n,R,rp,i,e,mu);
+    answer(j,1) = e;
+    answer(j,2) = a;
+    answer(j,3) = ra;
+    answer(j,4) = omegadot;
+    answer(j,5) = vp;
+    answer(j,6) = va;
+    % references for determining ra
+    % https://www.everythingrf.com/community/what-is-a-highly-elliptically-orbit
+    % https://en.wikipedia.org/wiki/Molniya_orbit says 40000
+    if answer(j,3) < 40000
+        answer(j,1) = 0;
+        answer(j,2) = 0;
+        answer(j,3) = 0;
+        answer(j,4) = 0;
+        answer(j,5) = 0;
+        answer(j,6) = 0;
+    end
+end
+% goal of function
+% 1. Larger time around apogee is ideal
+% 2. Omegadot as small as possible
+% 3. trajectory cannot collide with earth
+% 4. Might need to convert orbital elements and plot out trajectory
+
+function [a,omegadot,ra,vp,va] = molniya(j2,n,R,rp,i,e,mu)
+% semimajor axis
+a = rp/(1 - e);
+% apogee radius
+ra = a*(1 + e);
+% velocity at perigee
+vp = sqrt(mu*(2/rp - 1/a));
+va = sqrt(mu*(2/ra - 1/a));
+% set up check to ensure i values go to 0. they do.
+%check = 0.75*n*j2*((R/a)^2)*((5*(cosd(i))^2 - 1)/(1 - e^2)^2);
+omegadot = -1.5*n*j2*((R/a)^2)*(cosd(i)/(1 - e^2)^2);
+end
