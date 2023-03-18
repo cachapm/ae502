@@ -1,0 +1,152 @@
+clear
+clc
+close all
+
+% define givens
+a = 26600; % km
+i = 1.10654*180/pi; % deg
+e = 0.74; % -
+w = 5; % deg
+omega = 90; % deg
+M = 10*pi/180; % deg
+tof = 100*24*60*60;
+t = [0,tof];
+mu = 398600; % km^3 / s^2
+j2 = 0.00108;
+R = 6370;
+
+
+
+% Using AE402 code I used to convert orbital elements to position and
+% velocity as a sanity check
+ihat = [1 0 0];
+jhat = [0 1 0];
+khat = [0 0 1];
+% calculations
+Eguess = M;
+g = 1;
+it = 0;
+while abs(g) > 1e-10
+    g = Eguess - e*sin(Eguess) - M;
+    dg = 1 - e*cos(Eguess);
+    E1 = Eguess - g/dg;
+    %update
+    Eguess = E1;
+    it = it + 1;
+end
+E = Eguess*180/pi;
+f = 2*atan(sqrt((1-e)/(1+e))*tan(E/2));
+
+theta = w + f;
+
+% calculate magnitudes to eventually check against vectors
+h = sqrt(mu*a*(1 - e^2));
+r = (a*(1 - e^2)) / (1 + e*cosd(f));
+v = sqrt(mu*(2/r - 1/a));
+% determine r and v
+% r position vector (km)
+rbar = r*((cosd(theta)*cosd(omega) - cosd(i)*sind(omega)*sind(theta))*ihat + ...
+          (cosd(theta)*sind(omega) + cosd(i)*cosd(omega)*sind(theta))*jhat + ...
+          (sind(i)*sind(theta))*khat);
+check1 = norm(rbar) - r;
+% v velocity vector (km/s)
+vbar = (-mu/h)*(cosd(omega)*(sind(theta)+ e*sind(w)) + sind(omega)*(cosd(theta) + e*cosd(w))*cosd(i))*ihat + ...
+       (-mu/h)*(sind(omega)*(sind(theta)+ e*sind(w)) - cosd(omega)*(cosd(theta) + e*cosd(w))*cosd(i))*jhat + ...
+       (mu/h) *((cosd(theta) + e*cosd(w))*sind(i))*khat;
+check2 = norm(vbar) - v;
+
+% the rest of this code is still an adaptation of my AE402 HW
+% Two-Body + J2 
+r0 = rbar;
+v0 = vbar;
+P = 2*pi*sqrt(a^3/mu); 
+
+% set up ODE45 to evaluate orbit and variations over 100 days
+options = odeset('AbsTol',1e-10,'RelTol',1e-10);
+[t,X] = ode45(@eom_twobody,[t(1) t(end)],[r0; v0]',options,mu);
+
+% Althought not needed, this was in my previous code, so I'm still curious
+% what the orbit will look like over 100 days
+figure(1)
+plot3(X(:,1),X(:,2),X(:,3),'b-','Linewidth',2)
+title('Spacecraft Experiencing 100 Days w/ J2 Perturbation');
+xlabel('x distance (x) [km]');
+ylabel('y distance (y) [km]');
+zlabel('z distance (z) [km]');
+
+% tabulating results for plotting. not all of this is needed for this
+% problem, but it was for a previous problem
+for i = 1:length(X)
+    rvec = [X(i,1) X(i,2) X(i,3)];
+    vvec = [X(i,4) X(i,5) X(i,6)];
+    ri = norm(rvec);
+    vi = norm(vvec);
+    X(i,7) = 1 / (2/ri - vi^2/mu); % a
+    X(i,8:10) = (vi^2/mu - 1/ri)*rvec - (1/mu)*dot(rvec,vvec)*vvec; % e vector
+    X(i,11) = (X(i,8)^2 + X(i,9)^2 + X(i,10)^2)^(1/2); % e
+    X(i,12:14) = cross(rvec,vvec); % h vector
+    X(i,15) = norm(X(i,12:14)); % h
+    X(i,16) = acosd(dot((X(i,12:14))/X(i,15),khat)); % i
+    X(i,17:19) = cross(khat,X(i,12:14)/X(i,15)); % n vector
+    X(i,20) = norm(X(i,17:19)); % n
+    if dot(X(i,17:19),jhat) >= 0
+        X(i,21) = acosd(dot((X(i,17:19)/X(i,20)),ihat)); % omega
+    else
+        X(i,21) = 360 - acosd(dot((X(i,17:19)/X(i,20)),ihat)); % omega
+    end
+    
+    if dot(X(i,8:10),khat) >= 0
+        X(i,22) = acosd(dot(X(i,17:19),X(i,8:10))/(X(i,20)*X(i,11))); % w
+    else
+        X(i,22) = 360 - acosd(dot(X(i,17:19),X(i,8:10))/(X(i,20)*X(i,11))); % w
+    end
+end
+
+% figures showing variation in the orbital elements
+figure(2)
+plot(t,X(:,7)) % a
+title('Semimajor Axis (a) Variations Over 100 Days');
+xlabel('Time (t) [s]');
+ylabel('Semimajor Axis (a) [km]');
+figure(3)
+plot(t,X(:,11)) % e
+title('Eccentricity (e) Variations Over 100 Days');
+xlabel('Time (t) [s]');
+ylabel('Eccentricity (e) [-]');
+figure(4)
+plot(t,X(:,16)) % i
+title('Inclination (i) Variations Over 100 Days');
+xlabel('Time (t) [s]');
+ylabel('Inclination (i) [deg]');
+figure(5)
+plot(t,X(:,21)) % omega
+title('Right Acsension of Ascending Node (omega) Variations Over 100 Days');
+xlabel('Time (t) [s]');
+ylabel('Right Acsension of Ascending Node (omega) [deg]');
+figure(6)
+plot(t,X(:,22)) % w
+title('Argument of Periapse (w) Variations Over 100 Days');
+xlabel('Time (t) [s]');
+ylabel('Argument of Periapse (w) [deg]');
+
+% two body equation factoring in J2 perturbation. derived directly from
+% AE402 notes, original credit to Dr. Woollands
+function xdot = eom_twobody(t,x,mu)
+% define j2 value given in problem and perturbing gravitational
+% acceleration p due to J2, using Curtis Chapter 10 4th revised edition Eq
+% 10.30
+
+j2 = 0.00108;
+R = 6378;
+r = (x(1)^2 + x(2)^2 + x(3)^2)^(1/2);
+pJ2 = [((3/2)*((j2*mu*R^2)/r^4))*(x(1)/r)*(5*(x(3)/r)^2 - 1), ((3/2)*((j2*mu*R^2)/r^4))*(x(2)/r)*(5*(x(3)/r)^2 - 1), ((3/2)*((j2*mu*R^2)/r^4))*(x(3)/r)*(5*(x(3)/r)^2 - 3)];
+
+xdot(1) = x(4);
+xdot(2) = x(5);
+xdot(3) = x(6);
+xdot(4) = -mu * x(1) / ((x(1)^2 + x(2)^2 + x(3)^2)^(1/2))^3 + pJ2(1);
+xdot(5) = -mu * x(2) / ((x(1)^2 + x(2)^2 + x(3)^2)^(1/2))^3 + pJ2(2);
+xdot(6) = -mu * x(3) / ((x(1)^2 + x(2)^2 + x(3)^2)^(1/2))^3 + pJ2(3);
+
+xdot = xdot';
+end
