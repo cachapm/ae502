@@ -12,41 +12,30 @@ j2 = 0.00108; % -
 R = 6370; % km
 mu = 3.986*10^5; % km^3 / s^2
 % restrictions
-% perigee at least 600 km, choosing 600
-rp = 600 + R; % km
 % orbit earth three times a day -> 8 hour period
 P = 8*60*60; % seconds
-% high e value - will evaluate all to determine option
-evec = [0.5:.001:.999];
+% checking multiple perigee radii
+rpvec = [R+600:1:R+1200];
 % calculations
 % determine mean motion based off period
-n = 2*pi/P; 
-% keep the change in argument of perigee 0 by defining two inclination
+n = 2*pi/P;
+% determine semimajor axis
+a = (mu*(1/n)^2)^(1/3);
+% keep the change in argument of perigee 0 by defining inclination
 % values
 i = acosd(sqrt(1/5));
 %i = acosd(-sqrt(1/5));
-for j = 1:length(evec)
-    % objective: evaluate molniya function at different eccentricities.
+for j = 1:length(rpvec)
+    % objective: evaluate molniya function at different perigee radii
     % tabulating different variables to see what the orbit is doing
-    e = evec(j);
-    [a,omegadot,ra,vp,va] = molniya(j2,n,R,rp,i,e,mu);
-    answer(j,1) = e;
-    answer(j,2) = a;
+    rp = rpvec(j);
+    [e,omegadot,ra,vp,va] = molniya(j2,n,R,rp,i,mu,a);
+    answer(j,1) = rp;
+    answer(j,2) = e;
     answer(j,3) = ra;
     answer(j,4) = omegadot;
     answer(j,5) = vp;
     answer(j,6) = va;
-    % references for determining ra
-    % https://www.everythingrf.com/community/what-is-a-highly-elliptically-orbit
-    % https://en.wikipedia.org/wiki/Molniya_orbit says 40000
-    if answer(j,3) < 40000
-        answer(j,1) = 0;
-        answer(j,2) = 0;
-        answer(j,3) = 0;
-        answer(j,4) = 0;
-        answer(j,5) = 0;
-        answer(j,6) = 0;
-    end
 end
 % goal of function
 % 1. Larger time around apogee is ideal
@@ -54,11 +43,11 @@ end
 % 3. trajectory cannot collide with earth
 % 4. Might need to convert orbital elements and plot out trajectory
 
-function [a,omegadot,ra,vp,va] = molniya(j2,n,R,rp,i,e,mu)
-% semimajor axis
-a = rp/(1 - e);
+function [e,omegadot,ra,vp,va] = molniya(j2,n,R,rp,i,mu,a)
+% eccentricity (defined by rp and a)
+e = 1 - rp/a;
 % apogee radius
-ra = a*(1 + e);
+ra = a*(1+e);
 % velocity at perigee
 vp = sqrt(mu*(2/rp - 1/a));
 va = sqrt(mu*(2/ra - 1/a));
