@@ -1,0 +1,144 @@
+% Assignment 3
+% Problem 2
+% A more convenient representation of the same system can
+% be achieved through the use of Delaunay variables. In fact, the above
+% Hamiltonian expressed in Delaunay variables simply reads
+% HD = -1/2L + wH
+% where
+% L = na^2
+% G = L(1-e^2)^(1/2)
+% H = Gcosi
+% with a, e, i, n being the semimajor axis, eccentricity, inclination with re_spect to the orbital plane of the massive bodies, and the mean motion of
+% the satellite around the primary, respectively. Determine the equations of
+% motion and plot the orbit of the satellite in Cartesian, non-rotating space
+
+clear
+clc
+close all
+
+% given variables
+mu = 1;
+a0 = 1; %[-]
+e0 = 0.5; %[-]
+i0 = 45; %[deg]
+t = 100; %[TU]
+wrot = 0.01; % per system time unit [TU]
+
+% calculate appropriate variables
+n0 = sqrt(1/a0^3);
+P = 2*pi()*sqrt(a0^3 / mu);
+
+% self defined
+w0 = 0;
+omega0 = 0;
+M0 = 0;
+
+% calculate Delaunay variables
+L0 = n0*a0^2;
+l0 = M0;
+G0 = L0 * (1 - e0^2)^(1/2);
+g0 = w0;
+H0 = G0 * cosd(i);
+h0 = w0 + omega0;
+
+% set time step and total integration time
+dt = 0.01;
+tmax = t;
+tspan = [0:dt:tmax];
+
+% set up for ODE45
+nout = 1000; % number of solution points to output for plotting purposes
+options = odeset(...
+    'reltol', 1.e-8, ...
+    'abstol', 1.e-8, ...
+    'initialstep', P/1000);
+y0 = [L0 l0 G0 g0 H0 h0]';
+[t, y] = ode45(@delaunay, tspan, y0, options);
+
+% tabulate results
+L = y(:,1);
+l = y(:,2);
+G = y(:,3);
+g = y(:,4);
+H = y(:,5);
+h = y(:,6);
+
+% convert orbital elements to position vector so I can plot
+ihat = [1 0 0];
+jhat = [0 1 0];
+khat = [0 0 1];
+
+a = a0;
+e = e0;
+i = i0;
+M = M0;
+w = w0;
+omega = omega0;
+
+for j=1:length(y)
+    
+    % calculations
+    Eguess = M;
+    k = 1;
+    it = 0;
+    while abs(g) > 1e-8
+        k = Eguess - e*sin(Eguess) - M;
+        dk = 1 - e*cos(Eguess);
+        E1 = Eguess - k/dk;
+        %update
+        Eguess = E1;
+        it = it + 1;
+    end
+    E = Eguess;
+    f = 2*atan(sqrt((1-e)/(1+e))*tan(E/2));
+    f = f*180/pi;
+    theta = w + f;
+
+    % calculate magnitudes to eventually check against vectors
+    %h = sqrt(mu*a*(1 - e^2));
+    r = (a*(1 - e^2)) / (1 + e*cosd(f));
+    v = sqrt(mu*(2/r - 1/a));
+    % determine r and v
+    % r position vector (km)
+    rbar = r*((cosd(theta)*cosd(omega) - cosd(i)*sind(omega)*sind(theta))*ihat + ...
+          (cosd(theta)*sind(omega) + cosd(i)*cosd(omega)*sind(theta))*jhat + ...
+          (sind(i)*sind(theta))*khat);
+    check1 = norm(rbar) - r;
+
+    rvec(j,1) = rbar(1);
+    rvec(j,2) = rbar(2);
+    rvec(j,3) = rbar(3);
+    rvec(j,4) = check1;
+    
+    % update orbital elements using delaunay variables
+    a = sqrt(L(j)/n0);
+    e = sqrt(1 - (G(j)/L(j))^2);
+    i = acosd(H(j)/G(j));
+    M = l(j);
+    w = g(j) * 180 / pi;
+    omega = h(j) * 180/ pi;
+end
+
+plot3(rvec(:,1),rvec(:,2),rvec(:,3))
+title('Spacecraft Experiencing 100 Time Units');
+xlabel('x distance (x) [km]');
+ylabel('y distance (y) [km]');
+zlabel('z distance (z) [km]');
+
+function dfdt = delaunay(t,f)
+L = f(1);
+l = f(2);
+G = f(3);
+g = f(4);
+H = f(5);
+h = f(6);
+
+Ldot = 0;
+ldot = 1/L^3;
+Gdot = 0;
+gdot = 0;
+Hdot = 0;
+hdot = 0.01;
+
+dfdt = [Ldot ldot Gdot gdot Hdot hdot]';
+end
