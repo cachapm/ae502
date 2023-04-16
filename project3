@@ -25,13 +25,13 @@ t = 100; %[TU]
 wrot = 0.01; % per system time unit [TU]
 
 % calculate appropriate variables
-n0 = sqrt(1/a0^3);
-P = 2*pi()*sqrt(a0^3 / mu);
+n0 = sqrt(mu/a0^3); % mean motion
+P = 2*pi*sqrt(a0^3 / mu); % period
 
 % self defined
-w0 = 0;
-omega0 = 0;
-M0 = 0;
+w0 = 0; % argument of periapse
+omega0 = 0; % right ascension of ascending node
+M0 = 0; % mean anomaly
 
 % calculate Delaunay variables
 L0 = n0*a0^2;
@@ -63,11 +63,12 @@ g = y(:,4);
 H = y(:,5);
 h = y(:,6);
 
-% convert orbital elements to position vector so I can plot
+% convert orbital elements to position vector for plotting
 ihat = [1 0 0];
 jhat = [0 1 0];
 khat = [0 0 1];
 
+% convert initial conditions
 a = a0;
 e = e0;
 i = i0;
@@ -76,12 +77,11 @@ w = w0;
 omega = omega0;
 
 for j=1:length(y)
-    
-    % calculations
+    % calculations for true anomaly
     Eguess = M;
     k = 1;
     it = 0;
-    while abs(g) > 1e-8
+    while abs(k) > 1e-8
         k = Eguess - e*sin(Eguess) - M;
         dk = 1 - e*cos(Eguess);
         E1 = Eguess - k/dk;
@@ -90,25 +90,21 @@ for j=1:length(y)
         it = it + 1;
     end
     E = Eguess;
-    f = 2*atan(sqrt((1-e)/(1+e))*tan(E/2));
+    f = 2*atan2(sqrt(1+e)*tan(E/2),sqrt(1-e));
     f = f*180/pi;
+    % calculate theta for conversion
     theta = w + f;
 
-    % calculate magnitudes to eventually check against vectors
-    %h = sqrt(mu*a*(1 - e^2));
+    % calculate r magnitude using elements
     r = (a*(1 - e^2)) / (1 + e*cosd(f));
-    v = sqrt(mu*(2/r - 1/a));
-    % determine r and v
-    % r position vector (km)
+    % r position vector (DU)
     rbar = r*((cosd(theta)*cosd(omega) - cosd(i)*sind(omega)*sind(theta))*ihat + ...
           (cosd(theta)*sind(omega) + cosd(i)*cosd(omega)*sind(theta))*jhat + ...
           (sind(i)*sind(theta))*khat);
-    check1 = norm(rbar) - r;
-
+    % insert into columns for plotting
     rvec(j,1) = rbar(1);
     rvec(j,2) = rbar(2);
     rvec(j,3) = rbar(3);
-    rvec(j,4) = check1;
     
     % update orbital elements using delaunay variables
     a = sqrt(L(j)/n0);
@@ -118,12 +114,12 @@ for j=1:length(y)
     w = g(j) * 180 / pi;
     omega = h(j) * 180/ pi;
 end
-
+% plot resulting orbit
 plot3(rvec(:,1),rvec(:,2),rvec(:,3))
-title('Spacecraft Experiencing 100 Time Units');
-xlabel('x distance (x) [km]');
-ylabel('y distance (y) [km]');
-zlabel('z distance (z) [km]');
+title('Spacecraft Experiencing CR3BP Perturbations Over 100 Time Units');
+xlabel('x distance (x) [DU]');
+ylabel('y distance (y) [DU]');
+zlabel('z distance (z) [DU]');
 
 function dfdt = delaunay(t,f)
 L = f(1);
